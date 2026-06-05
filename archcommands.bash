@@ -135,7 +135,15 @@ repoc() {
   gh repo create "$1" "${2:---private}"
 }
 # Quick commit + push: gcp "your message"
-gcp() { git add -A && git commit -m "$*" && git push; }
+gcp() { git branch -m main && git add -A && git commit -m "$*" && git push -u origin main; }
+
+gremote() {
+  if [[ -z "$1" ]]; then
+    echo "Usage: gremote <github-url>"
+    return 1
+  fi
+  git remote add origin "$1" && echo "Remote added: $1"
+}
 
 
 # ── Misc Helpers ────────────────────────────────────────────
