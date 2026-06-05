@@ -144,6 +144,13 @@ gremote() {
   fi
   git remote add origin "$1" && echo "Remote added: $1"
 }
+gupstream() {
+  if [[ -z "$1" ]]; then
+    echo "Usage: gupstream <github-url>"
+    return 1
+  fi
+  git remote add upstream "$1" && echo "Upstream added: $1"
+}
 
 
 # ── Misc Helpers ────────────────────────────────────────────
