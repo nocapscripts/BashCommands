@@ -152,6 +152,10 @@ gupstream() {
   git remote add upstream "$1" && echo "Upstream added: $1"
 }
 
+gpupmain() {
+  git push --set-upstream origin main --force && echo "Force Pushed main to upstream."
+}
+
 
 # ── Misc Helpers ────────────────────────────────────────────
 
