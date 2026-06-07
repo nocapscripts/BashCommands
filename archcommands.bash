@@ -17,6 +17,8 @@ remove() { sudo pacman -Rns "$@"; }
 # Update the whole system
 update() { sudo pacman -Syu; }
 
+upackage() { sudo pacman -Sy "$@"; }
+
 # Search for a package
 search() { pacman -Ss "$@"; }
 
