@@ -124,7 +124,7 @@ sdisable() { sudo systemctl disable --now "$1"; }
 # ── Git Shortcuts ───────────────────────────────────────────
 
 alias gs="git status"
-alias ga="git add -A"
+alias ga="git add ."
 alias gc="git commit -m"
 alias gp="git push"
 alias gl="git log --oneline --graph --decorate -10"
