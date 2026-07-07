@@ -15,13 +15,13 @@ sudo mkdir -p ~/Commands
 ### 1. Copy the file to your Commands folder
 
 ```bash
-sudo cp archcommands.bash ~/Commands/archcommands.bash
+sudo cp commands.bash ~/Commands/commands.bash
 ```
 
 ### 2. Source it in your ~/.bashrc
 
 ```bash
-echo 'source ~/Commands/archcommands.bash' >> ~/.bashrc
+echo 'source ~/Commands/commands.bash' >> ~/.bashrc
 ```
 
 ### 3. Reload your shell
