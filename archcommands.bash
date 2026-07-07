@@ -1,41 +1,143 @@
 #!/usr/bin/env bash
 ##############################################################
-#  Arch Linux — Custom Simplified Commands
-#  Add to your ~/.bashrc:  source ~/arch_commands.bash
+#  Cross-Distro — Custom Simplified Commands
+#  Supports: Arch Linux, Debian/Ubuntu, Fedora
+#  Add to your ~/.bashrc:  source ~/linux_commands.bash
 #  or paste directly into ~/.bashrc
 ##############################################################
 
 
-# ── Package Management (pacman + yay wrappers) ─────────────
+# ── Distro Detection ────────────────────────────────────────
 
-# Install a package
-install() { sudo pacman -S "$@"; }
+_detect_distro() {
+    if [[ -n "$LINUX_CMDS_DISTRO" ]]; then
+        # Allow manual override: export LINUX_CMDS_DISTRO=arch|debian|fedora
+        echo "$LINUX_CMDS_DISTRO"
+        return
+    fi
+    if [[ -f /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        source /etc/os-release
+        local id="${ID,,}"
+        local id_like="${ID_LIKE,,}"
+        if [[ "$id" == "arch" || "$id_like" == *arch* ]]; then
+            echo "arch"
+        elif [[ "$id" == "fedora" || "$id_like" == *fedora* || "$id_like" == *rhel* ]]; then
+            echo "fedora"
+        elif [[ "$id" == "debian" || "$id" == "ubuntu" || "$id_like" == *debian* ]]; then
+            echo "debian"
+        else
+            echo "unknown"
+        fi
+    elif command -v pacman &>/dev/null; then
+        echo "arch"
+    elif command -v dnf &>/dev/null; then
+        echo "fedora"
+    elif command -v apt &>/dev/null; then
+        echo "debian"
+    else
+        echo "unknown"
+    fi
+}
 
-# Remove a package (and unused deps)
-remove() { sudo pacman -Rns "$@"; }
+# Cache the detected distro once per shell
+LINUX_CMDS_DETECTED_DISTRO="$(_detect_distro)"
 
-# Update the whole system
-update() { sudo pacman -Syu; }
+_unsupported_distro() {
+    echo "This command isn't supported on '$LINUX_CMDS_DETECTED_DISTRO'."
+    echo "You can override detection with: export LINUX_CMDS_DISTRO=arch|debian|fedora"
+    return 1
+}
 
-upackage() { sudo pacman -Sy "$@"; }
 
-# Search for a package
-search() { pacman -Ss "$@"; }
+# ── Package Management ──────────────────────────────────────
 
-# Show info about a package
-info() { pacman -Si "$@"; }
+install() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   sudo pacman -S "$@" ;;
+        debian) sudo apt install "$@" ;;
+        fedora) sudo dnf install "$@" ;;
+        *) _unsupported_distro ;;
+    esac
+}
 
-# List explicitly installed packages
-installed() { pacman -Qe "$@"; }
+remove() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   sudo pacman -Rns "$@" ;;
+        debian) sudo apt remove --autoremove "$@" ;;
+        fedora) sudo dnf remove "$@" ;;
+        *) _unsupported_distro ;;
+    esac
+}
+
+update() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   sudo pacman -Syu ;;
+        debian) sudo apt update && sudo apt upgrade ;;
+        fedora) sudo dnf upgrade --refresh ;;
+        *) _unsupported_distro ;;
+    esac
+}
+
+upackage() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   sudo pacman -Sy "$@" ;;
+        debian) sudo apt install "$@" ;;
+        fedora) sudo dnf install "$@" ;;
+        *) _unsupported_distro ;;
+    esac
+}
+
+search() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   pacman -Ss "$@" ;;
+        debian) apt search "$@" ;;
+        fedora) dnf search "$@" ;;
+        *) _unsupported_distro ;;
+    esac
+}
+
+info() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   pacman -Si "$@" ;;
+        debian) apt show "$@" ;;
+        fedora) dnf info "$@" ;;
+        *) _unsupported_distro ;;
+    esac
+}
+
+# List explicitly/manually installed packages
+installed() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   pacman -Qe "$@" ;;
+        debian) apt-mark showmanual "$@" ;;
+        fedora) dnf repoquery --userinstalled "$@" ;;
+        *) _unsupported_distro ;;
+    esac
+}
 
 # Find which package owns a file
-owns() { pacman -Qo "$@"; }
+owns() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   pacman -Qo "$@" ;;
+        debian) dpkg -S "$@" ;;
+        fedora) dnf provides "$@" ;;
+        *) _unsupported_distro ;;
+    esac
+}
 
-# Clean package cache (keep last 2 versions)
-clean() { sudo paccache -r; }
+# Clean package cache / unused deps
+clean() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   sudo paccache -r ;;
+        debian) sudo apt autoremove && sudo apt clean ;;
+        fedora) sudo dnf clean all && sudo dnf autoremove ;;
+        *) _unsupported_distro ;;
+    esac
+}
 
 
-# ── File & Directory Shortcuts ──────────────────────────────
+# ── File & Directory Shortcuts (distro-independent) ─────────
 
 # Go up N directories (default 1)
 up() {
@@ -52,7 +154,11 @@ mkcd() { mkdir -p "$1" && cd "$1" || return; }
 ff() { find . -iname "*$1*" 2>/dev/null; }
 
 # Quick find file by content
-fgrep() { grep -rn "$1" . 2>/dev/null; }
+# (named `findtext`, not `fgrep` — many distros predefine an `fgrep` alias,
+#  e.g. `alias fgrep='fgrep --color=auto'` in /etc/bash.bashrc, and bash
+#  expands that alias before parsing `fgrep() { ... }`, causing a
+#  "syntax error near unexpected token `('" when sourced.)
+findtext() { grep -rn "$1" . 2>/dev/null; }
 
 # Show directory size summary
 dsize() { du -sh "${1:-.}"; }
@@ -61,19 +167,13 @@ dsize() { du -sh "${1:-.}"; }
 lsize() { du -sh "${1:-.}"/* 2>/dev/null | sort -h; }
 
 
-# ── Web Search from Terminal ────────────────────────────────
+# ── Web Search from Terminal (distro-independent) ───────────
 
 # Search Google in default browser
 google() { xdg-open "https://www.google.com/search?q=$(echo "$*" | sed 's/ /+/g')"; }
 
 # Search DuckDuckGo in default browser
 duck() { xdg-open "https://duckduckgo.com/?q=$(echo "$*" | sed 's/ /+/g')"; }
-
-# Search the Arch Wiki
-archwiki() { xdg-open "https://wiki.archlinux.org/index.php?search=$(echo "$*" | sed 's/ /+/g')"; }
-
-# Search the AUR
-aursearch() { xdg-open "https://aur.archlinux.org/packages/?K=$(echo "$*" | sed 's/ /+/g')"; }
 
 # Fetch a quick answer from wttr.in (weather)
 weather() { curl -s "wttr.in/${1:-$(curl -s ifconfig.me/city)}?format=3"; }
@@ -84,8 +184,27 @@ myip() { curl -s ifconfig.me; echo; }
 # Check if a site is up
 isup() { curl -s --head --request GET "$1" | grep "200 OK" && echo "$1 is UP" || echo "$1 seems DOWN"; }
 
+# Search distro-specific docs/wiki/AUR
+docsearch() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   xdg-open "https://wiki.archlinux.org/index.php?search=$(echo "$*" | sed 's/ /+/g')" ;;
+        debian) xdg-open "https://www.debian.org/search.html?words=$(echo "$*" | sed 's/ /+/g')" ;;
+        fedora) xdg-open "https://docs.fedoraproject.org/en-US/search/?q=$(echo "$*" | sed 's/ /+/g')" ;;
+        *) _unsupported_distro ;;
+    esac
+}
 
-# ── System Info & Monitoring ────────────────────────────────
+# Search the AUR (Arch) or COPR (Fedora); no-op elsewhere
+aursearch() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        arch)   xdg-open "https://aur.archlinux.org/packages/?K=$(echo "$*" | sed 's/ /+/g')" ;;
+        fedora) xdg-open "https://copr.fedorainfracloud.org/coprs/fulltext/?fulltext=$(echo "$*" | sed 's/ /+/g')" ;;
+        *) _unsupported_distro ;;
+    esac
+}
+
+
+# ── System Info & Monitoring (distro-independent) ───────────
 
 # Quick system overview
 sysinfo() {
@@ -109,10 +228,49 @@ errors() { sudo journalctl -b --priority=err; }
 # Follow the system journal live
 log() { sudo journalctl -f; }
 
+# Firewall shortcuts — firewalld on Fedora, ufw on Debian/Ubuntu, unmanaged on Arch
+fwstatus() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        fedora) sudo firewall-cmd --state && sudo firewall-cmd --list-all ;;
+        debian) sudo ufw status verbose ;;
+        arch)   echo "Arch has no default firewall manager. Check iptables/nftables/ufw if installed." ;;
+        *) _unsupported_distro ;;
+    esac
+}
+fwopen() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        fedora) sudo firewall-cmd --permanent --add-port="$1" && sudo firewall-cmd --reload ;;
+        debian) sudo ufw allow "$1" ;;
+        *) _unsupported_distro ;;
+    esac
+}
+fwclose() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        fedora) sudo firewall-cmd --permanent --remove-port="$1" && sudo firewall-cmd --reload ;;
+        debian) sudo ufw deny "$1" ;;
+        *) _unsupported_distro ;;
+    esac
+}
 
-# ── systemd Service Shortcuts ───────────────────────────────
+# SELinux checks (Fedora); AppArmor checks (Debian/Ubuntu); n/a on Arch
+sestatus_short() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        fedora) getenforce ;;
+        debian) sudo aa-status 2>/dev/null || echo "AppArmor not installed/active." ;;
+        *) _unsupported_distro ;;
+    esac
+}
+seaudit() {
+    case "$LINUX_CMDS_DETECTED_DISTRO" in
+        fedora) sudo ausearch -m avc -ts recent ;;
+        debian) sudo journalctl -k | grep -i apparmor ;;
+        *) _unsupported_distro ;;
+    esac
+}
 
-# Shorter aliases for common systemctl actions
+
+# ── systemd Service Shortcuts (distro-independent) ──────────
+
 sstart()   { sudo systemctl start "$1"; }
 sstop()    { sudo systemctl stop "$1"; }
 srestart() { sudo systemctl restart "$1"; }
@@ -121,7 +279,7 @@ senable()  { sudo systemctl enable --now "$1"; }
 sdisable() { sudo systemctl disable --now "$1"; }
 
 
-# ── Git Shortcuts ───────────────────────────────────────────
+# ── Git Shortcuts (distro-independent) ──────────────────────
 
 alias gs="git status"
 alias ga="git add ."
@@ -159,15 +317,12 @@ gpupmain() {
 }
 
 
-# ── Misc Helpers ────────────────────────────────────────────
+# ── Misc Helpers (distro-independent) ───────────────────────
 
-# Reload bashrc without restarting
 reload() { source ~/.bashrc && echo "bashrc reloaded."; }
 
-# Show command history filtered by keyword
 hist() { history | grep "$1"; }
 
-# Extract any archive format
 extract() {
     case "$1" in
         *.tar.gz|*.tgz)  tar -xzf "$1"  ;;
@@ -184,11 +339,16 @@ extract() {
     esac
 }
 
-# Create a quick dated backup of a file
 backup() { cp "$1" "$1.bak.$(date +%Y%m%d_%H%M%S)"; }
+
+# Show which distro was detected
+whichdistro() { echo "Detected distro family: $LINUX_CMDS_DETECTED_DISTRO"; }
 
 # Show a cheat sheet of these commands
 cmds() {
+    echo ""
+    echo "  Detected distro: $LINUX_CMDS_DETECTED_DISTRO"
+    echo "  (override with: export LINUX_CMDS_DISTRO=arch|debian|fedora)"
     echo ""
     echo "  ── Packages ──────────────────────────────────────────"
     echo "  install <pkg>       Install a package"
@@ -196,15 +356,15 @@ cmds() {
     echo "  update              Full system update"
     echo "  search  <term>      Search package repos"
     echo "  info    <pkg>       Package details"
-    echo "  installed           List explicitly installed"
+    echo "  installed           List explicitly/manually installed"
     echo "  owns    <file>      Which package owns this file"
-    echo "  clean               Clear old package cache"
+    echo "  clean               Clear cache / unused deps"
     echo ""
     echo "  ── Files ─────────────────────────────────────────────"
     echo "  up [n]              Go up N directories"
     echo "  mkcd <dir>          Create dir and cd into it"
     echo "  ff <name>           Find file by name"
-    echo "  fgrep <text>        Find file by content"
+    echo "  findtext <text>     Find file by content"
     echo "  dsize [dir]         Directory size"
     echo "  lsize [dir]         List sizes of all items"
     echo "  extract <archive>   Extract any archive"
@@ -213,8 +373,8 @@ cmds() {
     echo "  ── Search / Web ──────────────────────────────────────"
     echo "  google <query>      Google in browser"
     echo "  duck <query>        DuckDuckGo in browser"
-    echo "  archwiki <query>    Search Arch Wiki"
-    echo "  aursearch <query>   Search AUR"
+    echo "  docsearch <query>   Search distro docs/wiki"
+    echo "  aursearch <query>   Search AUR (Arch) / COPR (Fedora)"
     echo "  weather [city]      Current weather"
     echo "  myip                Your public IP"
     echo "  isup <url>          Check if a site is reachable"
@@ -226,6 +386,12 @@ cmds() {
     echo "  ports               Show open ports"
     echo "  errors              Journal errors this boot"
     echo "  log                 Follow journal live"
+    echo "  fwstatus            Firewall status (firewalld/ufw)"
+    echo "  fwopen <port/proto> Open a firewall port"
+    echo "  fwclose <port/proto> Close a firewall port"
+    echo "  sestatus_short      SELinux (Fedora) / AppArmor (Debian) status"
+    echo "  seaudit             Recent SELinux/AppArmor denials"
+    echo "  whichdistro         Show detected distro family"
     echo ""
     echo "  ── Services ──────────────────────────────────────────"
     echo "  sstart/sstop/srestart/sstatus/senable/sdisable <svc>"
