@@ -218,11 +218,7 @@ sysinfo() {
     uptime -p
 }
 
-# Top N processes by CPU usage (default 10)
-topcpu() {
-    local n="${1:-10}"
-    ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n "$((n + 1))"
-}
+
 
 # Top N processes by memory usage (default 10)
 topmem() {
