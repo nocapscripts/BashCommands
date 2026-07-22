@@ -218,6 +218,17 @@ sysinfo() {
     uptime -p
 }
 
+# Top N processes by CPU usage (default 10)
+topcpu() {
+    local n="${1:-10}"
+    ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n "$((n + 1))"
+}
+
+# Top N processes by memory usage (default 10)
+topmem() {
+    local n="${1:-10}"
+    ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n "$((n + 1))"
+}
 
 # Show open ports
 ports() { ss -tulnp; }
@@ -304,16 +315,20 @@ gremote() {
   fi
   git remote add origin "$1" && echo "Remote added: $1"
 }
-gupstream() {
+gaddups() {
   if [[ -z "$1" ]]; then
-    echo "Usage: gupstream <github-url>"
+    echo "Usage: gaddups <github-url>"
     return 1
   fi
   git remote add upstream "$1" && echo "Upstream added: $1"
 }
 
-gpupmain() {
-  git push --set-upstream origin main --force && echo "Force Pushed main to upstream."
+gpups() {
+  if [[ -z "$1" ]]; then
+    echo "Usage: gpups"
+    return 1
+  fi
+  git push --set-upstream upstream main --force && echo "Force Pushed main to upstream."
 }
 
 
@@ -399,6 +414,12 @@ cmds() {
     echo "  ── Git ───────────────────────────────────────────────"
     echo "  gs / ga / gc / gp / gl / gd"
     echo "  gcp <message>       Add + commit + push"
+    echo "  gaddups             Add upstream to local branch"
+    echo "  gremote <git-url>             Add remote to local branch"
+    echo "  gpups               Push main to upstream"
+    echo "  gpupl               Push local branch to upstream"
+    echo "  gpupl <branch>     Push specific local branch to upstream"
+    echo "  repoc <name> <visibility>       Creates a new repo with a specific name"
     echo ""
     echo "  ── Misc ──────────────────────────────────────────────"
     echo "  reload              Reload ~/.bashrc"
